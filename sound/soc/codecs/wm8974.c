@@ -26,8 +26,13 @@
 #include <sound/tlv.h>
 
 #include "wm8974.h"
+//modfiy by LiuChen
+struct wm8974_priv{
+	unsigned int mclk;
+	unsigned int fs;
+};
 
-static const u16 wm8974_reg[WM8974_CACHEREGNUM] = {
+static  u16 wm8974_reg[WM8974_CACHEREGNUM] = {
 	0x0000, 0x0000, 0x0000, 0x0000,
 	0x0050, 0x0000, 0x0140, 0x0000,
 	0x0000, 0x0000, 0x0000, 0x00ff,
@@ -94,6 +99,7 @@ static const DECLARE_TLV_DB_SCALE(spk_tlv, -5700, 100, 0);
 static const struct snd_kcontrol_new wm8974_snd_controls[] = {
 
 SOC_SINGLE("Digital Loopback Switch", WM8974_COMP, 0, 1, 0),
+SOC_SINGLE("WM8974 MIC BIAS",WM8974_POWER1,4,1,0),
 
 SOC_ENUM("DAC Companding", wm8974_enum[1]),
 SOC_ENUM("ADC Companding", wm8974_enum[0]),
@@ -225,6 +231,7 @@ SND_SOC_DAPM_SUPPLY("Mic Bias", WM8974_POWER1, 4, 0, NULL, 0),
 
 SND_SOC_DAPM_INPUT("MICN"),
 SND_SOC_DAPM_INPUT("MICP"),
+//modfiy by liuchen
 SND_SOC_DAPM_INPUT("AUX"),
 SND_SOC_DAPM_OUTPUT("MONOOUT"),
 SND_SOC_DAPM_OUTPUT("SPKOUTP"),
@@ -232,6 +239,9 @@ SND_SOC_DAPM_OUTPUT("SPKOUTN"),
 };
 
 static const struct snd_soc_dapm_route wm8974_dapm_routes[] = {
+	//modfiy by LiuChen
+//	{"MICN",NULL,"Mic Bias"},
+//	{"MICP",NULL,"Mic Bias"},
 	/* Mono output mixer */
 	{"Mono Mixer", "PCM Playback Switch", "DAC"},
 	{"Mono Mixer", "Aux Playback Switch", "Aux Input"},
@@ -384,13 +394,16 @@ static int wm8974_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	struct snd_soc_codec *codec = codec_dai->codec;
 	u16 iface = 0;
 	u16 clk = snd_soc_read(codec, WM8974_CLOCK) & 0x1fe;
-
+	
+	printk("(bpeer) %s ++++\n",__func__);
 	/* set master/slave audio interface */
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
 	case SND_SOC_DAIFMT_CBM_CFM:
+		printk("(bpeer) wm8974 in master mode\n");
 		clk |= 0x0001;
 		break;
 	case SND_SOC_DAIFMT_CBS_CFS:
+		printk("(bpeer) wm8974 in slave mode\n");
 		break;
 	default:
 		return -EINVAL;
@@ -399,31 +412,42 @@ static int wm8974_set_dai_fmt(struct snd_soc_dai *codec_dai,
 	/* interface format */
 	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
 	case SND_SOC_DAIFMT_I2S:
+		printk("(bpeer) wm8974 in I2s mode\n");
 		iface |= 0x0010;
 		break;
 	case SND_SOC_DAIFMT_RIGHT_J:
+		printk("(bpeer) wm8974 in RIGHT_J mode\n");
 		break;
 	case SND_SOC_DAIFMT_LEFT_J:
+		printk("(bpeer) wm8974 in LEFT_J mode\n");
 		iface |= 0x0008;
 		break;
 	case SND_SOC_DAIFMT_DSP_A:
+		printk("(bpeer) wm8974 in DSP_A mode\n");
 		iface |= 0x00018;
 		break;
 	default:
+		printk("(bpeer) wm8974 not any mode\n");
 		return -EINVAL;
 	}
 
 	/* clock inversion */
 	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
 	case SND_SOC_DAIFMT_NB_NF:
+		printk("(bpeer) wm8974 SND_SOC_DAIFMT_NB_NF\n");
+		//modfiy by LiuChen
+		//iface |= 0x0100;
 		break;
 	case SND_SOC_DAIFMT_IB_IF:
+		printk("(bpeer) wm8974 SND_SOC_DAIFMT_IB_IF\n");
 		iface |= 0x0180;
 		break;
 	case SND_SOC_DAIFMT_IB_NF:
+		printk("(bpeer) wm8974 SND_SOC_DAIFMT_IB_NF\n");
 		iface |= 0x0100;
 		break;
 	case SND_SOC_DAIFMT_NB_IF:
+		printk("(bpeer) wm8974 SND_SOC_DAIFMT_NB_IF\n");
 		iface |= 0x0080;
 		break;
 	default:
@@ -432,33 +456,185 @@ static int wm8974_set_dai_fmt(struct snd_soc_dai *codec_dai,
 
 	snd_soc_write(codec, WM8974_IFACE, iface);
 	snd_soc_write(codec, WM8974_CLOCK, clk);
+	printk("(bpeer) %s --------\n",__func__);
+	return 0;
+}
+//modfiy by LiuChen
+static  unsigned int wm8974_read_reg_cache(struct snd_soc_codec *codec, unsigned reg)
+{
+	if(reg >= ARRAY_SIZE(wm8974_reg))
+		return -1;
+	return wm8974_reg[reg];
+}
+//modfiy by LiuChen
+static int wm8974_write(struct snd_soc_codec *codec, unsigned int reg, unsigned int value)
+{
+	u16 data = 0;
+	u8  buf[2];
+	int ret,cont = 5;
+	printk("\n");
+	printk("wm8974reg = %#x = %d\n",reg, reg);
+	//data = (reg & 0xef) << 9;
+	data = (reg & 0x7f) << 9;
+	data |= (value & 0x1ff);
+	buf[0] = (data & 0xff00) >> 8;
+	buf[1] = data & 0xff;
+	
+	if(reg < ARRAY_SIZE(wm8974_reg))
+	{
+		wm8974_reg[reg] = value;
+	//	printk("wm8974[%u]=%#x\n",reg, value);
+	}
+	printk("wm8974[%#x]=%#x\n",buf[0],buf[1]);
+	while(cont){
+		ret = codec->hw_write(codec->control_data, buf, 2);
+		if( ret == 2 ){
+			printk("wm8974 write successful!\n");
+			return 0;
+		}
+		
+		cont--;
+	}
+}
+#if 0
+
+//modfiy by LiuChen
+static unsigned int wm8974_get_mclkdiv(unsigned int f_in, unsigned int f_out,
+				  int *mclkdiv)
+{
+	unsigned int ratio = 2 * f_in / f_out;
+	
+	if (ratio <= 2) {
+		*mclkdiv = WM8974_MCLKDIV_1;
+		ratio = 2;
+	} else if (ratio == 3) {
+
+		*mclkdiv = WM8974_MCLKDIV_1_5;
+
+	} else if (ratio == 4) {
+
+		*mclkdiv = WM8974_MCLKDIV_2;
+
+	} else if (ratio <= 6) {
+
+		*mclkdiv = WM8974_MCLKDIV_3;
+
+		ratio = 6;
+
+	} else if (ratio <= 8) {
+
+		*mclkdiv = WM8974_MCLKDIV_4;
+
+		ratio = 8;
+
+	} else if (ratio <= 12) {
+
+		*mclkdiv = WM8974_MCLKDIV_6;
+
+		ratio = 12;
+
+	} else if (ratio <= 16) {
+
+		*mclkdiv = WM8974_MCLKDIV_8;
+
+		ratio = 16;
+
+	} else {
+
+		*mclkdiv = WM8974_MCLKDIV_12;
+
+		ratio = 24;
+
+	}
+
+	printk("{wm8974_get_mclkdiv  f_in=%uHz , f_out=%uHz, mclkdiv=%d}\n",
+							f_in, f_out,ratio);
+	return f_out * ratio / 2;
+}
+
+//modfiy by LiuChen
+static int wm8974_update_clocks(struct snd_soc_dai *dai)
+{
+	struct snd_soc_codec *codec = dai->codec;
+	struct wm8974_priv *priv = snd_soc_codec_get_drvdata(codec);
+	unsigned int fs256;
+	unsigned int fpll = 0;
+	unsigned int f;
+	int mclkdiv;
+
+	if (!priv->mclk || !priv->fs)
+		return 0;
+	
+	fs256 = 256 * priv->fs;
+	
+	f = wm8974_get_mclkdiv(priv->mclk, fs256, &mclkdiv);
+	if (f != priv->mclk) {
+		printk("%s f!= priv->mclk f=%uHz, priv->mclk=%uHz\n",__func__, f, priv->mclk);
+		fpll = wm8974_get_mclkdiv(22500000, fs256, &mclkdiv);
+
+	}
+	
+	wm8974_set_dai_pll(dai, 0, 0, priv->mclk, fpll);
+	wm8974_set_dai_clkdiv(dai, WM8974_MCLKDIV, mclkdiv);
+	
 	return 0;
 }
 
+//modfiy by LiuChen
+static int wm8974_set_dai_sysclk(struct snd_soc_dai *dai, int clk_id,
+			unsigned int freq, int dir)
+{
+	struct snd_soc_codec *codec = dai->codec;
+	struct wm8974_priv *priv = snd_soc_codec_get_drvdata(codec);
+	
+	if (dir != SND_SOC_CLOCK_IN)
+		return -EINVAL;
+
+	priv->mclk = freq;
+
+	return wm8974_update_clocks(dai);
+
+}
+#endif
 static int wm8974_pcm_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params,
 				struct snd_soc_dai *dai)
 {
 	struct snd_soc_codec *codec = dai->codec;
+	//modfiy by LiuChen
+	struct wm8974_priv *priv = snd_soc_codec_get_drvdata(codec);
 	u16 iface = snd_soc_read(codec, WM8974_IFACE) & 0x19f;
 	u16 adn = snd_soc_read(codec, WM8974_ADD) & 0x1f1;
+	int err;
 
+	printk("(bpeer) %s +++++++++\n",__func__);	
+	priv->fs = params_rate(params);
+//	err = wm8974_update_clocks(dai);
+	if(err){
+		printk("%s  wm8974_update_clicks failed\n",__func__);
+		return err;
+	}
 	/* bit size */
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S16_LE:
+		printk("(bpeer) wm8974 FORMAT_S16_LE\n");
 		break;
 	case SNDRV_PCM_FORMAT_S20_3LE:
+		printk("(bpeer) wm8974 FORMAT_S20_3LE\n");
 		iface |= 0x0020;
 		break;
 	case SNDRV_PCM_FORMAT_S24_LE:
+		printk("(bpeer) wm8974 FORMAT_S24_LE\n");
 		iface |= 0x0040;
 		break;
 	case SNDRV_PCM_FORMAT_S32_LE:
+		printk("(bpeer) wm8974 FORMAT_S32_LE\n");
 		iface |= 0x0060;
 		break;
 	}
 
 	/* filter coefficient */
+	//设置采样频率
 	switch (params_rate(params)) {
 	case 8000:
 		adn |= 0x5 << 1;
@@ -479,21 +655,29 @@ static int wm8974_pcm_hw_params(struct snd_pcm_substream *substream,
 	case 48000:
 		break;
 	}
-
+	printk("(bpeer) wm8974 sample_rate =%d\n", params_rate(params));
 	snd_soc_write(codec, WM8974_IFACE, iface);
+	printk("(bpeer) R4 iface:%#x\n",iface);
 	snd_soc_write(codec, WM8974_ADD, adn);
+	printk("(bpeer)%s --------\n",__func__);
 	return 0;
 }
 
 static int wm8974_mute(struct snd_soc_dai *dai, int mute)
 {
 	struct snd_soc_codec *codec = dai->codec;
+	printk("(bpeer) %s ++++++\n",__func__);
 	u16 mute_reg = snd_soc_read(codec, WM8974_DAC) & 0xffbf;
 
-	if (mute)
+	if (mute){
+		printk("(bpeer) mute:%d\n", mute);
 		snd_soc_write(codec, WM8974_DAC, mute_reg | 0x40);
-	else
+	}
+	else{
+		printk("(bpeer) mute:%d\n",mute);
 		snd_soc_write(codec, WM8974_DAC, mute_reg);
+	}
+	printk("(bpeer) %s -------\n",__func__);
 	return 0;
 }
 
@@ -502,15 +686,17 @@ static int wm8974_set_bias_level(struct snd_soc_codec *codec,
 	enum snd_soc_bias_level level)
 {
 	u16 power1 = snd_soc_read(codec, WM8974_POWER1) & ~0x3;
-
+	printk("(bpeer) %s ++++++\n",__func__);
 	switch (level) {
 	case SND_SOC_BIAS_ON:
 	case SND_SOC_BIAS_PREPARE:
+		printk("(bpeer) SND_SOC_BIAS_PREPARE&&SND_SOC_BIAS_ON:\n");
 		power1 |= 0x1;  /* VMID 50k */
 		snd_soc_write(codec, WM8974_POWER1, power1);
 		break;
 
 	case SND_SOC_BIAS_STANDBY:
+		printk("(bpeer) SND_SOC_BIAS_STANDBY:\n");
 		power1 |= WM8974_POWER1_BIASEN | WM8974_POWER1_BUFIOEN;
 
 		if (codec->dapm.bias_level == SND_SOC_BIAS_OFF) {
@@ -526,6 +712,7 @@ static int wm8974_set_bias_level(struct snd_soc_codec *codec,
 		break;
 
 	case SND_SOC_BIAS_OFF:
+		printk("(bpeer) SND_SOC_BIAS_OFF:\n");
 		snd_soc_write(codec, WM8974_POWER1, 0);
 		snd_soc_write(codec, WM8974_POWER2, 0);
 		snd_soc_write(codec, WM8974_POWER3, 0);
@@ -533,6 +720,7 @@ static int wm8974_set_bias_level(struct snd_soc_codec *codec,
 	}
 
 	codec->dapm.bias_level = level;
+	printk("(bpeer) %s ------\n",__func__);
 	return 0;
 }
 
@@ -547,6 +735,8 @@ static const struct snd_soc_dai_ops wm8974_ops = {
 	.set_fmt = wm8974_set_dai_fmt,
 	.set_clkdiv = wm8974_set_dai_clkdiv,
 	.set_pll = wm8974_set_dai_pll,
+	//modfiy by LiuChen
+	//.set_sysclk = wm8974_set_dai_sysclk,
 };
 
 static struct snd_soc_dai_driver wm8974_dai = {
@@ -569,34 +759,42 @@ static struct snd_soc_dai_driver wm8974_dai = {
 
 static int wm8974_suspend(struct snd_soc_codec *codec)
 {
+	printk("(bpeer) %s++++++\n",__func__);
 	wm8974_set_bias_level(codec, SND_SOC_BIAS_OFF);
+	printk("(bpeer) %s-------\n", __func__);
 	return 0;
 }
 
 static int wm8974_resume(struct snd_soc_codec *codec)
 {
+	printk("(bpeer) %s++++++\n",__func__);
 	wm8974_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+	printk("(bpeer) %s++++++\n",__func__);
 	return 0;
 }
 
 static int wm8974_probe(struct snd_soc_codec *codec)
 {
 	int ret = 0;
+	//modfiy by LiuChen
+	codec->read = wm8974_read_reg_cache;
+	codec->write = wm8974_write;
+	codec->hw_write = (hw_write_t)i2c_master_send;
+	codec->control_data = container_of(codec->dev, struct i2c_client, dev);
 
-	ret = snd_soc_codec_set_cache_io(codec, 7, 9, SND_SOC_I2C);
+	//ret = snd_soc_codec_set_cache_io(codec, 7, 9, SND_SOC_I2C);
 	if (ret < 0) {
 		dev_err(codec->dev, "Failed to set cache I/O: %d\n", ret);
 		return ret;
 	}
-
-	ret = wm8974_reset(codec);
-	if (ret < 0) {
-		dev_err(codec->dev, "Failed to issue reset\n");
-		return ret;
-	}
-
+		ret = wm8974_reset(codec);
+		if (ret < 0) {
+			dev_err(codec->dev, "Failed to issue reset\n");
+			return ret;
+		}
+	//modfiy by LiuChen
 	wm8974_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
-
+	
 	return ret;
 }
 
@@ -616,7 +814,7 @@ static struct snd_soc_codec_driver soc_codec_dev_wm8974 = {
 	.reg_cache_size = ARRAY_SIZE(wm8974_reg),
 	.reg_word_size = sizeof(u16),
 	.reg_cache_default = wm8974_reg,
-
+	.reg_cache_step = 1,
 	.controls = wm8974_snd_controls,
 	.num_controls = ARRAY_SIZE(wm8974_snd_controls),
 	.dapm_widgets = wm8974_dapm_widgets,
@@ -629,7 +827,72 @@ static int wm8974_i2c_probe(struct i2c_client *i2c,
 			    const struct i2c_device_id *id)
 {
 	int ret;
+	//struct i2c_adapter *adapter = i2c->adapter;
+	struct i2c_adapter *adapter = to_i2c_adapter(i2c->dev.parent);
+	//modfiy by LiuChen
+	struct wm8974_priv *priv;
+	u8 data[2];
+	if (!i2c_check_functionality(adapter, I2C_FUNC_I2C)) {
+		printk("I2C-Adapter doesn't support I2C_FUNC_I2C\n");
+	}
+	//modfiy by LiuChen
+	priv = devm_kzalloc(&i2c->dev, sizeof(*priv), GFP_KERNEL);
+	if( !priv)
+		return -ENOMEM;
+	i2c_set_clientdata(i2c, priv);
+//	#if 0
+		data[0] = 0x00 ,data[1] = 0x00;
+		ret = i2c_master_send(i2c,  data, 2);
+		if( ret == 2 ){ printk("i2c_master_send successful\n");} else { printk("send failed\n");}
+		
+		data[0] = 0x02 ,data[1] = 0x7f;//R1 microphone Bias 使能
+		ret = i2c_master_send(i2c,  data, 2);
+		if( ret == 2 ){ printk("i2c_master_send successful\n");} else { printk("send failed\n");}
+		
+		data[0] = 0x04 ,data[1] = 0x15;//R2 INPPGAEN使能, ADC使能
+		//data[0] = 0x04 ,data[1] = 0x14;
+		ret = i2c_master_send(i2c,  data, 2);
+		if( ret == 2 ){ printk("i2c_master_send successful\n");} else { printk("send failed\n");}
 
+
+		data[0] = 0x6 ,data[1] = 0xec;//R3
+		ret = i2c_master_send(i2c,  data, 2);
+		if( ret == 2 ){ printk("i2c_master_send successful\n");} else { printk("send failed\n");}
+		
+		//
+		data[0] = 0x1c ,data[1] = 0x8;//R14 ADC=128*
+		ret = i2c_master_send(i2c,  data, 2);
+		if( ret == 2 ){ printk("i2c_master_send successful\n");} else { printk("send failed\n");}
+		
+		//
+		data[0] = 0x58 ,data[1] = 0x01;//R44
+		ret = i2c_master_send(i2c,  data, 2);
+		if( ret == 2 ){ printk("i2c_master_send successful\n");} else { printk("send failed\n");}
+		
+		//
+		data[0] = 0x5a ,data[1] = 0x3f;//R45
+		ret = i2c_master_send(i2c,  data, 2);
+		if( ret == 2 ){ printk("i2c_master_send successful\n");} else { printk("send failed\n");}
+		
+		//
+		data[0] = 0x5f ,data[1] = 0x70;//R47
+		ret = i2c_master_send(i2c,  data, 2);
+		if( ret == 2 ){ printk("i2c_master_send successful\n");} else { printk("send failed\n");}
+	
+		data[0] = 0x64 ,data[1] = 0x22;//R50
+		//data[0] = 0x64 ,data[1] = 0x20;
+		ret = i2c_master_send(i2c,  data, 2);
+		if( ret == 2 ){ printk("i2c_master_send successful\n");} else { printk("send failed\n");}
+		
+		data[0] = 0x6c ,data[1] = 0x3f; //R54
+		ret = i2c_master_send(i2c,  data, 2);
+		if( ret == 2 ){ printk("i2c_master_send successful\n");} else { printk("send failed\n");}
+		
+	//	data[0] = 0x70 ,data[1] = 0x02;//R56
+	//	ret = i2c_master_send(i2c,  data, 2);
+	//	if( ret == 2 ){ printk("i2c_master_send successful\n");} else { printk("send failed\n");}
+//#endif
+			
 	ret = snd_soc_register_codec(&i2c->dev,
 			&soc_codec_dev_wm8974, &wm8974_dai, 1);
 
@@ -649,10 +912,16 @@ static const struct i2c_device_id wm8974_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, wm8974_i2c_id);
 
+static const struct of_device_id of_bpeer_wm8974_match[] = {
+	{.compatible = "bpeer,wm8974"},
+	{}
+};
+
 static struct i2c_driver wm8974_i2c_driver = {
 	.driver = {
 		.name = "wm8974",
 		.owner = THIS_MODULE,
+		.of_match_table = of_bpeer_wm8974_match,
 	},
 	.probe =    wm8974_i2c_probe,
 	.remove =   wm8974_i2c_remove,

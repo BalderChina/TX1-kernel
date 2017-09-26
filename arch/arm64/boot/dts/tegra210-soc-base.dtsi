@@ -582,7 +582,10 @@
 		iommus = <&smmu TEGRA_SWGROUP_APE>;
 		status = "disabled";
 	};
-
+	sound_bpeer {
+		iommus = <&smmu TEGRA_SWGROUP_APE>;
+		status = "disabled";
+	};
 	tegra_pwm: pwm@7000a000 {
 		compatible = "nvidia,tegra124-pwm";
 		reg = <0x0 0x7000a000 0x0 0x100>;
@@ -1029,7 +1032,7 @@
 			compatible = "nvidia,tegra210-i2s";
 			reg = <0x702d1000 0x100>;
 			nvidia,ahub-i2s-id = <0>;
-			status = "disabled";
+			status = "okay";
 		};
 
 		tegra_i2s2: i2s@702d1100 {

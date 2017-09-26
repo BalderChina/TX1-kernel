@@ -38,6 +38,7 @@
 #include "tegra_asoc_utils_alt.h"
 #include "tegra_asoc_machine_alt.h"
 #include "tegra_asoc_hwdep_alt.h"
+#include "tegra210_xbar_alt.h"
 
 #define DRV_NAME "tegra-snd-t210ref"
 
@@ -199,7 +200,7 @@ static int tegra_t210ref_ad1937_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_codec *codec = ad1937_dai->codec;
 	struct snd_soc_card *card = codec->card;
 	struct tegra_t210ref *machine = snd_soc_card_get_drvdata(card);
-	struct snd_soc_pcm_stream *dai_params =
+	struct snd_soc_pcm_stream *dai_params = 
 		(struct snd_soc_pcm_stream *)rtd->dai_link->params;
 	struct device_node *np =
 		(struct device_node *)rtd->dai_link->cpu_of_node;
@@ -579,7 +580,7 @@ static int tegra_t210ref_sfc4_init(struct snd_soc_pcm_runtime *rtd)
 	return 0;
 }
 
-static int tegra_t210ref_ad1937_hw_params(
+static int tegra_t210ref_wm8974_hw_params(
 			struct snd_pcm_substream *substream,
 			struct snd_pcm_hw_params *params,
 			unsigned int idx, char *prefix)
@@ -591,63 +592,86 @@ static int tegra_t210ref_ad1937_hw_params(
 	struct tegra_t210ref *machine = snd_soc_card_get_drvdata(card);
 	struct snd_soc_pcm_stream *dai_params;
 	unsigned int fmt;
-	int mclk, clk_out_rate, val;
+	int mclk, clk_out_rate;
+	//int val;
 	int err;
 
 	/* check if idx has valid number */
 	if (idx == -EINVAL)
 		return idx;
-
+	printk("(bpeer) %s +++++++\n",__func__);
 	dai_params =
 		(struct snd_soc_pcm_stream *)card->rtd[idx].dai_link->params;
 	fmt = card->rtd[idx].dai_link->dai_fmt;
-
+	
+	printk("(bpeer) %s  params_rate(params):%d\n", __func__, params_rate(params));
+	printk("(bpeer) %s  dai_params->rate_min:%d\n", __func__, dai_params->rate_min);
+	dai_params->rate_min = params_rate(params);
 	switch (dai_params->rate_min) {
+	//switch (params_rate(params)) {
 	case 8000:
-		clk_out_rate = dai_params->rate_min * 512;
+		//clk_out_rate = dai_params->rate_min * 512;
+		clk_out_rate = params_rate(params) * 256;
 		break;
 	case 64000:
 	case 88200:
 	case 96000:
-		clk_out_rate = dai_params->rate_min * 128;
+		//clk_out_rate = dai_params->rate_min * 128;
+		clk_out_rate = params_rate(params) * 256;
 		break;
 	default:
 		clk_out_rate = dai_params->rate_min * 256;
+		//clk_out_rate = params_rate(params) * 256;
 		break;
 	}
 
-	mclk = clk_out_rate * 2;
+	//mclk = clk_out_rate * 2;
+	mclk = clk_out_rate;
 
 	if (max9485_info.addr)
 		set_max9485_clk(machine->max9485_client, mclk);
 
-	err = snd_soc_dai_set_sysclk(card->rtd[idx].codec_dai,
-			0, mclk,
-			SND_SOC_CLOCK_IN);
+	//err = snd_soc_dai_set_sysclk(card->rtd[idx].codec_dai,
+	//		0, mclk,
+	//		SND_SOC_CLOCK_IN);
+	err = snd_soc_dai_set_pll(card->rtd[idx].codec_dai, 0, 0, 12000000, 12288000);
 	if (err < 0) {
 		dev_err(card->dev,
 			"%s codec_dai clock(%d) not set\n", prefix, mclk);
 		return err;
 	}
 
-	/*
-	 * AD193X driver enables both DAC and ADC as MASTER
-	 * so both ADC and DAC drive LRCLK and BCLK and it causes
-	 * noise. To solve this, we need to disable one of them.
-	 */
-	if ((fmt & SND_SOC_DAIFMT_MASTER_MASK) == SND_SOC_DAIFMT_CBM_CFM) {
-		val = snd_soc_read(card->rtd[idx].codec_dai->codec,
-				AD193X_DAC_CTRL1);
-		val &= ~AD193X_DAC_LCR_MASTER;
-		val &= ~AD193X_DAC_BCLK_MASTER;
-		snd_soc_write(card->rtd[idx].codec_dai->codec,
-				AD193X_DAC_CTRL1, val);
-	}
+	//tegra_alt_asoc_utils_set_rate(&machine->audio_clock,
+	  //                       dai_params->rate_min, mclk, mclk);
+	tegra_alt_asoc_utils_set_rate(&machine->audio_clock,
+	                         dai_params->rate_min, 12000000, 12000000);
 
+	err = snd_soc_dai_set_bclk_ratio(card->rtd[idx].cpu_dai,
+		tegra_machine_get_bclk_ratio(&card->rtd[idx]));
+	if (err < 0) {
+		dev_err(card->dev, "Can't set cpu dai bclk ratio\n");
+		return err;
+        }
+
+//#if 0
+	for (idx = 0; idx < TEGRA210_XBAR_DAI_LINKS; idx++) {
+                if (card->rtd[idx].dai_link->params) {
+                        dai_params =
+                          (struct snd_soc_pcm_stream *)
+                          card->rtd[idx].dai_link->params;
+                        dai_params->rate_min = params_rate(params);
+                        dai_params->channels_min = params_channels(params);
+                        dai_params->formats = 1ULL << SNDRV_PCM_FORMAT_S16_LE;
+                }
+        }
+	
+//#endif
+
+	printk("(bpeer) %s ---------------\n",__func__);
 	return 0;
 }
 
-
+#if 0
 static int tegra_t210ref_ad1937_x_hw_params(struct snd_pcm_substream *substream,
 					struct snd_pcm_hw_params *params)
 {
@@ -668,7 +692,7 @@ static int tegra_t210ref_ad1937_z_hw_params(struct snd_pcm_substream *substream,
 	return tegra_t210ref_ad1937_hw_params(substream, params,
 		tegra_machine_get_codec_dai_link_idx("ad-playback-z"), "z");
 }
-
+#endif
 static int tegra_t210ref_spdif_hw_params(struct snd_pcm_substream *substream,
 					struct snd_pcm_hw_params *params)
 {
@@ -676,7 +700,18 @@ static int tegra_t210ref_spdif_hw_params(struct snd_pcm_substream *substream,
 
 	return 0;
 }
-
+//modfiy by LiuChen
+static int tegra_t210ref_wm8974_z_hw_params(struct snd_pcm_substream *substream,
+					struct snd_pcm_hw_params *params)
+{
+	return tegra_t210ref_wm8974_hw_params(substream, params,
+		tegra_machine_get_codec_dai_link_idx("WM8974"), "z");
+}
+//modfiy by LiuChen
+static struct snd_soc_ops tegra_t210ref_wm8974_z_ops = {
+	.hw_params = tegra_t210ref_wm8974_z_hw_params,
+};
+#if 0
 static struct snd_soc_ops tegra_t210ref_ad1937_x_ops = {
 	.hw_params = tegra_t210ref_ad1937_x_hw_params,
 };
@@ -689,6 +724,7 @@ static struct snd_soc_ops tegra_t210ref_ad1937_z_ops = {
 	.hw_params = tegra_t210ref_ad1937_z_hw_params,
 };
 
+#endif
 static struct snd_soc_ops tegra_t210ref_spdif_ops = {
 	.hw_params = tegra_t210ref_spdif_hw_params,
 };
@@ -703,6 +739,61 @@ static const struct snd_soc_dapm_widget tegra_t210ref_dapm_widgets[] = {
 	SND_SOC_DAPM_LINE("LineIn-z", NULL),
 	SND_SOC_DAPM_LINE("LineIn-s", NULL),
 };
+//modfiy by LiuChen
+static int  bpeer_wm8974_init(struct snd_soc_pcm_runtime *rtd)
+{
+
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	struct snd_soc_codec *codec = codec_dai->codec;
+	struct snd_soc_card *card = codec->card;
+	struct tegra_t210ref *machine = snd_soc_card_get_drvdata(card);
+	struct snd_soc_pcm_stream *dai_params = 
+		(struct snd_soc_pcm_stream *)rtd->dai_link->params;
+	unsigned int fmt = rtd->dai_link->dai_fmt;
+	unsigned int mclk;
+	int err;
+	printk("(bpeer) %s +++++++\n", __func__);
+	
+	mclk = dai_params->rate_min * 256;
+	
+	err = tegra_alt_asoc_utils_set_extern_parent(&machine->audio_clock,
+							"pll_a_out0");
+	if(err < 0){
+		dev_err(card->dev, " %s()Failed to set extern clk parent\n",__func__);
+		return err;
+	}
+	/* initialize 256fs by default */
+	//tegra_alt_asoc_utils_set_rate(&machine->audio_clock,	
+	//		dai_params->rate_min, mclk, mclk);
+	tegra_alt_asoc_utils_set_rate(&machine->audio_clock,	
+			dai_params->rate_min, 12000000, 12000000);
+
+	if ((fmt & SND_SOC_DAIFMT_MASTER_MASK) == SND_SOC_DAIFMT_CBM_CFM) {
+		/* direct MCLK mode in AD1937, mclk needs to be srate * 512 */
+		 if (max9485_info.addr)
+			set_max9485_clk(machine->max9485_client, mclk);
+	
+		err = snd_soc_dai_set_sysclk(codec_dai, 0, mclk,
+                				SND_SOC_CLOCK_IN);
+		if( err < 0){
+			dev_err(card->dev, "wm8974 clock not set\n");
+			return err;
+		}
+
+	}
+
+
+	 err = snd_soc_dai_set_bclk_ratio(cpu_dai,
+			tegra_machine_get_bclk_ratio(rtd));
+	if( err < 0){
+		dev_err(card->dev, "Failed to set cpu dai bclk ratio\n");
+        	return err;
+	}
+	
+	printk("(bpeer) %s ---------\n",__func__);	
+	return 0;
+}
 
 static const struct snd_soc_dapm_route tegra_t210ref_audio_map[] = {
 };
@@ -751,7 +842,7 @@ static int tegra_t210ref_driver_probe(struct platform_device *pdev)
 	card->dev = &pdev->dev;
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, machine);
-
+	
 	if (np) {
 		ret = snd_soc_of_parse_card_name(card, "nvidia,model");
 		if (ret)
@@ -814,7 +905,6 @@ static int tegra_t210ref_driver_probe(struct platform_device *pdev)
 		&tegra_t210ref_amx2_dai_init);
 	tegra_machine_set_dai_init(TEGRA210_DAI_LINK_ADX2,
 		&tegra_t210ref_adx2_dai_init);
-
 	/* set codec init */
 	for (i = 0; i < machine->num_codec_links; i++) {
 		if (tegra_t210ref_codec_links[i].name) {
@@ -834,9 +924,13 @@ static int tegra_t210ref_driver_probe(struct platform_device *pdev)
 				"spdif-playback"))
 				tegra_t210ref_codec_links[i].init =
 					tegra_t210ref_spdif_init;
+			else if (strstr(tegra_t210ref_codec_links[i].name,
+				"WM8974")){
+				tegra_t210ref_codec_links[i].init = 
+					bpeer_wm8974_init;
+			}
 		}
 	}
-
 	/* set AMX/ADX params */
 	if (machine->amx_adx_conf.num_amx) {
 		switch (machine->amx_adx_conf.num_amx) {
@@ -877,7 +971,6 @@ static int tegra_t210ref_driver_probe(struct platform_device *pdev)
 			break;
 		}
 	}
-
 	if (machine->amx_adx_conf.num_adx) {
 		switch (machine->amx_adx_conf.num_adx) {
 		case 2:
@@ -917,7 +1010,6 @@ static int tegra_t210ref_driver_probe(struct platform_device *pdev)
 			break;
 		}
 	}
-
 	/* set sfc dai_init */
 	tegra_machine_set_dai_init(TEGRA210_DAI_LINK_SFC1_RX,
 		&tegra_t210ref_sfc1_init);	/* in - 8000Hz, out - 48000Hz */
@@ -936,38 +1028,19 @@ static int tegra_t210ref_driver_probe(struct platform_device *pdev)
 
 	/* set ADMAIF dai_ops */
 	for (i = TEGRA210_DAI_LINK_ADMAIF1;
-		i <= TEGRA210_DAI_LINK_ADMAIF10; i++)
+		i <= TEGRA210_DAI_LINK_ADMAIF6; i++)
 		tegra_machine_set_dai_ops(i, &tegra_t210ref_spdif_ops);
-
-	for (i = 0; i < machine->num_codec_links; i++) {
-		if (tegra_t210ref_codec_links[i].name) {
-			if (strstr(tegra_t210ref_codec_links[i].name,
-				"ad-playback-z")) {
-				for (j = TEGRA210_DAI_LINK_ADMAIF1;
-					j <= TEGRA210_DAI_LINK_ADMAIF4; j++)
-					tegra_machine_set_dai_ops(j,
-						&tegra_t210ref_ad1937_z_ops);
-			} else if (strstr(tegra_t210ref_codec_links[i].name,
-				"ad-playback-x")) {
-				for (j = TEGRA210_DAI_LINK_ADMAIF5;
-					j <= TEGRA210_DAI_LINK_ADMAIF6; j++)
-					tegra_machine_set_dai_ops(j,
-						&tegra_t210ref_ad1937_x_ops);
-			} else if (strstr(tegra_t210ref_codec_links[i].name,
-				"ad-playback-y")) {
-				for (j = TEGRA210_DAI_LINK_ADMAIF7;
-					j <= TEGRA210_DAI_LINK_ADMAIF8; j++)
-					tegra_machine_set_dai_ops(j,
-						&tegra_t210ref_ad1937_y_ops);
-			} else if (strstr(tegra_t210ref_codec_links[i].name,
-				"spdif-playback")) {
-				tegra_machine_set_dai_ops(
-					TEGRA210_DAI_LINK_ADMAIF9,
-					&tegra_t210ref_spdif_ops);
+	for(i = 0; i < machine->num_codec_links; i++){
+		if(tegra_t210ref_codec_links[i].name){
+			if(strstr(tegra_t210ref_codec_links[i].name,
+				"WM8974")){
+				for(j = TEGRA210_DAI_LINK_ADMAIF1;
+					j <= TEGRA210_DAI_LINK_ADMAIF3; j++)
+				tegra_machine_set_dai_ops(j, &tegra_t210ref_wm8974_z_ops);
 			}
 		}
 	}
-
+	
 	/* append t210ref specific dai_links */
 	card->num_links =
 		tegra_machine_append_dai_link(tegra_t210ref_codec_links,
@@ -993,7 +1066,6 @@ static int tegra_t210ref_driver_probe(struct platform_device *pdev)
 			goto err_alloc_dai_link;
 		}
 	}
-
 	ret = tegra_alt_asoc_utils_init(&machine->audio_clock,
 					&pdev->dev,
 					card);
@@ -1013,7 +1085,6 @@ static int tegra_t210ref_driver_probe(struct platform_device *pdev)
 			ret);
 		goto err_unregister_card;
 	}
-
 	return 0;
 
 err_unregister_card:

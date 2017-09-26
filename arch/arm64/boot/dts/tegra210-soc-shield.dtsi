@@ -148,6 +148,9 @@
 	sound_ref {
 		status = "okay";
 	};
+	sound_bpeer {
+		status = "okay";
+	};
 
 	pwm@7000a000 {
 		status = "okay";

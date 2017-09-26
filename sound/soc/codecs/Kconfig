@@ -7,6 +7,9 @@ config SND_SOC_I2C_AND_SPI
 	default m if I2C=m
 	default y if I2C=y
 	default y if SPI_MASTER=y
+config SND_SOC_BPEER_WM8974
+	tristate "Build WM8974 AUDIO CODEC"
+	default y if I2C=y
 
 config SND_SOC_ALL_CODECS
 	tristate "Build all ASoC CODEC drivers"
